@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Campamento</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(130deg, #eaf5ff 0%, #daf1ff 40%, #c0e6ff 100%);
+            min-height: 100vh;
+            color: #1d3350;
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        }
+        .glass-card {
+            background: rgba(255,255,255,0.78);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.45);
+            box-shadow: 0 20px 40px rgba(32, 74, 170, 0.18);
+            border-radius: 20px;
+        }
+        .page-header {
+            color: #0b3f7f;
+            text-shadow: 0 1px 3px rgba(9,59,106,.14);
+            font-weight: 700;
+        }
+        .btn-agregar, .btn-pago, .btn-eliminar, .btn-cancelado {
+            border-radius: 12px;
+            font-weight: 600;
+            box-shadow: 0 5px 12px rgba(16, 66, 130, 0.17);
+        }
+        .btn-agregar { background: #2ec76a; border-color: #27b35f; color: #fff; }
+        .btn-pago { background: #4f9bff; border-color: #3f82ea; color: #fff; }
+        .btn-eliminar { background: #ff677a; border-color: #e0545f; color: #fff; }
+        .btn-cancelado { background: #8695a8; border-color: #7b8f9f; color: #fff; }
+        .table thead th {
+            background: linear-gradient(90deg, #559be8, #2d78ef);
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            font-size: .85rem;
+            border: none;
+        }
+        .table tbody tr:hover { background: rgba(100, 156, 255, 0.1); }
+        .status-pill {
+            font-size: .78rem;
+            padding: .35rem .65rem;
+            border-radius: 999px;
+            font-weight: 600;
+            color: white;
+        }
+        .status-pendiente { background: #ffbf24; }
+        .status-abonando { background: #4f9bff; }
+        .status-cancelado { background: #b0bdc7; }
+        @media (max-width: 992px) {
+            .table-responsive { font-size: 0.92rem; }
+        }
+        @media (max-width: 768px) {
+            .table-responsive { font-size: .88rem; }
+            .table { border: none; }
+            .table thead { display: none; }
+            .table tbody tr { display: block; border: 1px solid rgba(0,0,0,0.09); border-radius: 14px; margin-bottom: 1rem; background: rgba(255,255,255,0.85); box-shadow: 0 8px 18px rgba(0,0,0,0.06); }
+            .table tbody td { display: block; width: 100%; padding: .65rem .9rem; text-align: left; border-top: 1px solid rgba(0,0,0,0.06); }
+            .table tbody td:first-child { border-top: none; }
+            .table tbody td::before { content: attr(data-label); color: #2d4b78; font-weight: 700; display: block; margin-bottom: .25rem; font-size: .74rem; text-transform: uppercase; }
+            .table tbody td .d-flex { justify-content: flex-start; }
+            .table tbody td span, .table tbody td a, .table tbody td button { margin-top: .2rem; }
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-4">
+
+    <h2 class="text-center mb-4">Control de Campamento</h2>
+
+    <div class="glass-card shadow p-3">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5>Lista de Campistas</h5>
+            <a href="/agregar/" class="btn btn-success">+ Agregar</a>
+        </div>
+
+        <form method="GET" class="row g-2 align-items-end mb-3">
+            <div class="col-md-4">
+                <label for="nombre" class="form-label">Nombre o Apellido</label>
+                <input type="text" name="nombre" id="nombre" value="{{ search_name }}" class="form-control" placeholder="Buscar..." />
+            </div>
+            <div class="col-md-3">
+                <label for="talla_camisa" class="form-label">Talla de Camisa</label>
+                <select name="talla_camisa" id="talla_camisa" class="form-select">
+                    <option value="">Todas</option>
+                    <option value="4" {% if filter_talla == '4' %}selected{% endif %}>4</option>
+                    <option value="6" {% if filter_talla == '6' %}selected{% endif %}>6</option>
+                    <option value="8" {% if filter_talla == '8' %}selected{% endif %}>8</option>
+                    <option value="10" {% if filter_talla == '10' %}selected{% endif %}>10</option>
+                    <option value="12" {% if filter_talla == '12' %}selected{% endif %}>12</option>
+                    <option value="14" {% if filter_talla == '14' %}selected{% endif %}>14</option>
+                    <option value="16" {% if filter_talla == '16' %}selected{% endif %}>16</option>
+                    <option value="18" {% if filter_talla == '18' %}selected{% endif %}>18</option>
+                    <option value="XS" {% if filter_talla == 'XS' %}selected{% endif %}>XS</option>
+                    <option value="S" {% if filter_talla == 'S' %}selected{% endif %}>S</option>
+                    <option value="M" {% if filter_talla == 'M' %}selected{% endif %}>M</option>
+                    <option value="L" {% if filter_talla == 'L' %}selected{% endif %}>L</option>
+                    <option value="XL" {% if filter_talla == 'XL' %}selected{% endif %}>XL</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="estado" class="form-label">Estado</label>
+                <select name="estado" id="estado" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="Pendiente" {% if filter_estado == 'Pendiente' %}selected{% endif %}>Pendiente</option>
+                    <option value="Abonando" {% if filter_estado == 'Abonando' %}selected{% endif %}>Abonando</option>
+                    <option value="Cancelado" {% if filter_estado == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="button" id="resetFilters" class="btn btn-secondary">Restablecer</button>
+            </div>
+        </form>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="p-2 rounded bg-info bg-opacity-10 border border-info">
+                    <strong>Total campistas filtrados:</strong> {{ campistas|length }}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="p-2 rounded bg-secondary bg-opacity-10 border border-secondary">
+                    <strong>Total general:</strong> {{ estado_counts.Pendiente|default:0 }} pendientes, {{ estado_counts.Abonando|default:0 }} abonando, {{ estado_counts.Cancelado|default:0 }} cancelados
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col">
+                <strong>Conteo tallas:</strong>
+                {% for item in tallas_counts %}
+                    <span class="badge bg-primary me-1 mb-1">{{ item.talla_camisa }}: {{ item.total }}</span>
+                {% empty %}
+                    <span class="text-muted">Sin tallas registradas</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="table-responsive mt-3">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Teléfono</th>
+                    <th>Camisa</th>
+                    <th>Pagado</th>
+                    <th>Saldo</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="campistasBody">
+                {% for c in campistas %}
+                <tr>
+                    <td data-label="Nombre">{{ c.nombre }}</td>
+                    <td data-label="Teléfono">{{ c.telefono }}</td>
+                    <td data-label="Camisa">
+                        {% if c.quiere_camisa %}
+                            Sí ({{ c.talla_camisa }})
+                        {% else %}
+                            No
+                        {% endif %}
+                    </td>
+                    <td data-label="Pagado">{{ c.total_pagado_display }}</td>
+                    <td data-label="Saldo">{{ c.saldo_pendiente_display }}</td>
+                    <td data-label="Estado">
+                        {% if c.estado == 'Pendiente' %}
+                            <span class="status-pill status-pendiente">Pendiente</span>
+                        {% elif c.estado == 'Abonando' %}
+                            <span class="status-pill status-abonando">Abonando</span>
+                        {% else %}
+                            <span class="status-pill status-cancelado">Cancelado</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Acciones">
+                        <div class="d-flex flex-wrap gap-2">
+                        {% if c.estado != 'Cancelado' %}
+                            <a href="{% url 'agregar_pago' c.id %}" class="btn btn-sm btn-pago">
+                                <i class="fas fa-credit-card me-1"></i> Pagar
+                            </a>
+                        {% else %}
+                            <button type="button" class="btn btn-sm btn-cancelado" disabled>
+                                <i class="fas fa-ban me-1"></i> Cancelado
+                            </button>
+                        {% endif %}
+                        <a href="{% url 'agregar_pago' c.id %}" class="btn btn-sm btn-info">
+                            <i class="fas fa-eye me-1"></i> Ver
+                        </a>
+                        <button type="button" class="btn btn-sm btn-eliminar" onclick="confirmarEliminar({{ c.id }}, '{{ c.nombre }}')">
+                            <i class="fas fa-trash me-1"></i> Eliminar
+                        </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <nav aria-label="Paginación campistas" class="mt-3">
+            <ul class="pagination justify-content-center" id="paginationContainer"></ul>
+        </nav>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const campistasBody = document.getElementById('campistasBody');
+const paginationContainer = document.getElementById('paginationContainer');
+const inputNombre = document.getElementById('nombre');
+const selectTalla = document.getElementById('talla_camisa');
+const selectEstado = document.getElementById('estado');
+
+function confirmarEliminar(id, nombre) {
+    if (confirm(`¿Estás seguro de que quieres eliminar a ${nombre}? Esta acción no se puede deshacer.`)) {
+        window.location.href = `/eliminar/${id}/`;
+    }
+}
+
+async function fetchCampistas(page = 1) {
+    const params = new URLSearchParams();
+    if (inputNombre.value.trim()) params.set('nombre', inputNombre.value.trim());
+    if (selectTalla.value) params.set('talla_camisa', selectTalla.value);
+    if (selectEstado.value) params.set('estado', selectEstado.value);
+    params.set('page', page);
+
+    const response = await fetch(`/campistas-data/?${params.toString()}`);
+    if (!response.ok) {
+        console.error('Error al obtener datos de campistas');
+        return;
+    }
+
+    const data = await response.json();
+    renderCampistas(data.campistas);
+    renderPaginacion(data.current_page, data.num_pages);
+    renderResumenes(data.tallas_counts, data.estado_counts, data.total_items);
+}
+
+function renderCampistas(campistas) {
+    campistasBody.innerHTML = '';
+    if (campistas.length === 0) {
+        campistasBody.innerHTML = `<tr><td colspan="8" class="text-center py-4">No se encontraron campistas con esos filtros.</td></tr>`;
+        return;
+    }
+
+    campistas.forEach(c => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="Nombre">${c.nombre}</td>
+            <td data-label="Teléfono">${c.telefono}</td>
+            <td data-label="Camisa">${c.quiere_camisa ? 'Sí (' + c.talla_camisa + ')' : 'No'}</td>
+            <td data-label="Pagado">${c.total_pagado_display}</td>
+            <td data-label="Saldo">${c.saldo_pendiente_display}</td>
+            <td data-label="Estado"><span class="status-pill ${c.estado === 'Pendiente' ? 'status-pendiente' : c.estado === 'Abonando' ? 'status-abonando' : 'status-cancelado'}">${c.estado}</span></td>
+            <td data-label="Acciones">
+                <div class="d-flex flex-wrap gap-2">
+                    ${c.estado !== 'Cancelado' ? `<a href="/agregar_pago/${c.id}/" class="btn btn-sm btn-pago"><i class="fas fa-credit-card me-1"></i>Pagar</a>` : `<button type="button" class="btn btn-sm btn-cancelado" disabled><i class="fas fa-ban me-1"></i>Cancelado</button>`}
+                    <a href="/agregar_pago/${c.id}/" class="btn btn-sm btn-info"><i class="fas fa-eye me-1"></i>Ver</a>
+                    <button type="button" class="btn btn-sm btn-eliminar" onclick="confirmarEliminar(${c.id}, '${c.nombre.replace("'", "\\'")}')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                </div>
+            </td>
+        `;
+        campistasBody.appendChild(row);
+    });
+}
+
+function renderPaginacion(currentPage, numPages) {
+    paginationContainer.innerHTML = '';
+    if (numPages <= 1) return;
+
+    const createPageItem = (num, text = null, active = false, disabled = false) => {
+        const li = document.createElement('li');
+        li.className = `page-item ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}`;
+        const a = document.createElement('a');
+        a.className = 'page-link';
+        a.href = '#';
+        a.textContent = text || num;
+        a.onclick = (e) => { e.preventDefault(); if (!disabled && currentPage !== num) fetchCampistas(num); };
+        li.appendChild(a);
+        return li;
+    };
+
+    paginationContainer.appendChild(createPageItem(currentPage - 1, 'Anterior', false, currentPage === 1));
+
+    const start = Math.max(1, currentPage - 2);
+    const end = Math.min(numPages, currentPage + 2);
+
+    for (let p = start; p <= end; p++) {
+        paginationContainer.appendChild(createPageItem(p, p, p === currentPage));
+    }
+
+    paginationContainer.appendChild(createPageItem(currentPage + 1, 'Siguiente', false, currentPage === numPages));
+}
+
+function renderResumenes(tallasCounts, estadoCounts, totalItems) {
+    const totalCampistas = document.querySelector('.bg-info strong + text') || null;
+    // Actualiza texto en el HTML ya rendereado si se quiere, pero estamos reutilizando el DOM ya existente.
+    const totalFilterEl = document.querySelector('.p-2.rounded.bg-info');
+    if (totalFilterEl) {
+        totalFilterEl.innerHTML = `<strong>Total campistas filtrados:</strong> ${totalItems}`;
+    }
+    const totalGeneralEl = document.querySelector('.p-2.rounded.bg-secondary');
+    if (totalGeneralEl) {
+        totalGeneralEl.innerHTML = `<strong>Total general:</strong> ${estadoCounts.Pendiente || 0} pendientes, ${estadoCounts.Abonando || 0} abonando, ${estadoCounts.Cancelado || 0} cancelados`;
+    }
+
+    const tallasEl = document.querySelector('.row.mb-3 .col');
+    if (tallasEl) {
+        let inner = '<strong>Conteo tallas:</strong> ';
+        if (tallasCounts.length === 0) {
+            inner += '<span class="text-muted">Sin tallas registradas</span>';
+        } else {
+            tallasCounts.forEach(item => {
+                inner += `<span class="badge bg-primary me-1 mb-1">${item.talla_camisa}: ${item.total}</span>`;
+            });
+        }
+        tallasEl.innerHTML = inner;
+    }
+}
+
+inputNombre.addEventListener('input', () => fetchCampistas(1));
+selectTalla.addEventListener('change', () => fetchCampistas(1));
+selectEstado.addEventListener('change', () => fetchCampistas(1));
+
+const resetFilters = document.getElementById('resetFilters');
+resetFilters.addEventListener('click', () => {
+    inputNombre.value = '';
+    selectTalla.value = '';
+    selectEstado.value = '';
+    fetchCampistas(1);
+});
+
+fetchCampistas(1);
+</script>
+
+</body>
+</html>

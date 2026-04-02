@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agregar Pago - Campamento</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(130deg, #eaf5ff 0%, #dff2ff 45%, #c5e9ff 100%);
+            min-height: 100vh;
+            color: #0c3860;
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        }
+        .glass-card {
+            background: rgba(255,255,255,0.80);
+            border: 1px solid rgba(255,255,255,0.65);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 45px rgba(20, 61, 104, 0.18);
+            border-radius: 20px;
+        }
+        .btn-custom {
+            border-radius: 14px;
+            padding: 12px 24px;
+            font-weight: 600;
+            transition: all 0.25s ease;
+        }
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.20);
+        }
+        .btn-pago { background: #4f9bff; border-color: #3f82ea; color: #fff; }
+        .btn-volver { background: #667eea; border-color: #5065c1; color: #fff; }
+        .btn-save { background: #24c46f; border-color: #1da863; color: #fff; }
+        .amount-display {
+            background: rgba(255,255,255,0.85);
+            border: 1px solid #d6e7fb;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 10px 0;
+        }
+        @media (max-width: 768px) {
+            .container { padding: 1.2rem; }
+            .form-control, .form-select { font-size: 0.96rem; }
+            .btn-custom { font-size: 0.95rem; }
+            .row.text-center .col-4 .p-2 { font-size: 0.82rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="glass-card p-4">
+                <div class="text-center mb-4">
+                    <i class="fas fa-credit-card fa-3x text-primary mb-3"></i>
+                    <h2 class="text-primary">Agregar Pago</h2>
+                    <h5 class="text-muted">{{ campista.nombre }}</h5>
+                </div>
+
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    {{ error }}
+                </div>
+                {% endif %}
+
+                <div class="row text-center mb-4">
+                    <div class="col-4">
+                        <div class="p-2 bg-info text-white rounded">
+                            <small>Total</small>
+                            <br><strong id="totalAmount">C$ {{ campista.total }}</strong>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 bg-success text-white rounded">
+                            <small>Pagado</small>
+                            <br><strong id="pagadoAmount">C$ {{ campista.total_pagado }}</strong>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 bg-warning text-white rounded">
+                            <small>Saldo</small>
+                            <br><strong id="saldoAmount">C$ {{ campista.saldo_pendiente }}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                {% if campista.estado != 'Cancelado' %}
+                <form method="POST" id="pagoForm">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="monto" class="form-label">
+                            <i class="fas fa-dollar-sign"></i> Monto a Pagar
+                        </label>
+                        <input type="number" step="0.01" name="monto" id="monto" class="form-control form-control-lg" placeholder="0.00" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="moneda" class="form-label">
+                            <i class="fas fa-coins"></i> Tipo de Moneda
+                        </label>
+                        <select name="moneda" id="moneda" class="form-select form-select-lg" required>
+                            <option value="">Seleccione moneda</option>
+                            <option value="USD">💵 Dólares (USD)</option>
+                            <option value="NIO">🇳🇮 Córdobas (NIO)</option>
+                        </select>
+                    </div>
+
+                    <div id="amountDisplay" class="amount-display d-none">
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">Equivalente en USD:</small>
+                                <br><span id="usdAmount" class="fw-bold text-primary">$0.00</span>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Equivalente en NIO:</small>
+                                <br><span id="nioAmount" class="fw-bold text-success">C$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-save btn-custom btn-lg">
+                            <i class="fas fa-save"></i> Guardar Pago
+                        </button>
+                        <a href="{% url 'lista_campistas' %}" class="btn btn-volver btn-custom">
+                            <i class="fas fa-arrow-left"></i> Volver a Lista
+                        </a>
+                    </div>
+                </form>
+                {% else %}
+                <div class="alert alert-success" role="alert">
+                    Este campista está <strong>Cancelado</strong>. No se permiten más pagos.
+                </div>
+                <a href="{% url 'lista_campistas' %}" class="btn btn-volver btn-custom">
+                    <i class="fas fa-arrow-left"></i> Volver a Lista
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const EXCHANGE_RATE = 36.67; // 1 USD = 36.67 NIO
+
+// Valores originales en dólares (asumido).
+const originalTotal = {{ campista.total }};
+const originalPagado = {{ campista.total_pagado }};
+const originalSaldo = {{ campista.saldo_pendiente }};
+
+function updateAmountsDisplay(moneda) {
+    const totalElement = document.getElementById('totalAmount');
+    const pagadoElement = document.getElementById('pagadoAmount');
+    const saldoElement = document.getElementById('saldoAmount');
+
+    if (moneda === 'USD') {
+        totalElement.textContent = '$' + originalTotal.toFixed(2);
+        pagadoElement.textContent = '$' + originalPagado.toFixed(2);
+        saldoElement.textContent = '$' + originalSaldo.toFixed(2);
+    } else if (moneda === 'NIO') {
+        totalElement.textContent = 'C$' + Math.round(originalTotal * EXCHANGE_RATE);
+        pagadoElement.textContent = 'C$' + Math.round(originalPagado * EXCHANGE_RATE);
+        saldoElement.textContent = 'C$' + Math.round(originalSaldo * EXCHANGE_RATE);
+    } else {
+        // Por defecto se muestra como están guardados en dólares
+        totalElement.textContent = '$' + originalTotal.toFixed(2);
+        pagadoElement.textContent = '$' + originalPagado.toFixed(2);
+        saldoElement.textContent = '$' + originalSaldo.toFixed(2);
+    }
+}
+
+document.getElementById('moneda').addEventListener('change', function() {
+    const monto = parseFloat(document.getElementById('monto').value) || 0;
+    const moneda = this.value;
+    const display = document.getElementById('amountDisplay');
+    const usdAmount = document.getElementById('usdAmount');
+    const nioAmount = document.getElementById('nioAmount');
+
+    // Actualizar cuadritos de resumen
+    updateAmountsDisplay(moneda);
+
+    if (moneda && monto > 0) {
+        display.classList.remove('d-none');
+        if (moneda === 'USD') {
+            usdAmount.textContent = '$' + monto.toFixed(2);
+            nioAmount.textContent = 'C$' + Math.round(monto * EXCHANGE_RATE);
+        } else if (moneda === 'NIO') {
+            usdAmount.textContent = '$' + (monto / EXCHANGE_RATE).toFixed(2);
+            nioAmount.textContent = 'C$' + Math.round(monto);
+        }
+    } else {
+        display.classList.add('d-none');
+    }
+});
+
+// Inicializar los valores de los cuadritos cuando se carga la página
+window.addEventListener('DOMContentLoaded', function() {
+    const monedaSeleccionada = document.getElementById('moneda').value;
+    if (monedaSeleccionada) {
+        updateAmountsDisplay(monedaSeleccionada);
+    } else {
+        updateAmountsDisplay('USD');
+    }
+});
+
+document.getElementById('monto').addEventListener('input', function() {
+    document.getElementById('moneda').dispatchEvent(new Event('change'));
+});
+
+document.getElementById('pagoForm').addEventListener('submit', function(e) {
+    const monto = parseFloat(document.getElementById('monto').value);
+    const moneda = document.getElementById('moneda').value;
+
+    if (!moneda) {
+        alert('Por favor, seleccione un tipo de moneda.');
+        e.preventDefault();
+        return;
+    }
+
+    if (monto <= 0) {
+        alert('Por favor, ingrese un monto válido mayor a cero.');
+        e.preventDefault();
+        return;
+    }
+
+    const confirmMessage = `¿Confirmar pago de ${moneda === 'USD' ? '$' + monto.toFixed(2) : 'C$' + monto.toFixed(2)}?`;
+    if (!confirm(confirmMessage)) {
+        e.preventDefault();
+    }
+});
+</script>
+</body>
+</html>
