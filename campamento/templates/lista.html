@@ -6,6 +6,7 @@
 
     <!-- Bootstrap CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(130deg, #eaf5ff 0%, #daf1ff 40%, #c0e6ff 100%);
@@ -78,8 +79,10 @@
 
     <div class="glass-card shadow p-3">
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5>Lista de Campistas</h5>
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div>
+                <h5 class="mb-0">Lista de Campistas</h5>
+            </div>
             <a href="/agregar/" class="btn btn-success">+ Agregar</a>
         </div>
 
@@ -191,11 +194,12 @@
                             <button type="button" class="btn btn-sm btn-cancelado" disabled>
                                 <i class="fas fa-ban me-1"></i> Cancelado
                             </button>
-                        {% endif %}
-                        <a href="{% url 'agregar_pago' c.id %}" class="btn btn-sm btn-info">
+                        {% endif %}                        <a href="{% url 'editar_campista' c.id %}" class="btn btn-sm btn-warning">
+                            <i class="fas fa-edit me-1"></i> Editar
+                        </a>                        <a href="{% url 'agregar_pago' c.id %}" class="btn btn-sm btn-info">
                             <i class="fas fa-eye me-1"></i> Ver
                         </a>
-                        <button type="button" class="btn btn-sm btn-eliminar" onclick="confirmarEliminar({{ c.id }}, '{{ c.nombre }}')">
+                        <button type="button" class="btn btn-sm btn-eliminar" data-campista-id="{{ c.id }}">
                             <i class="fas fa-trash me-1"></i> Eliminar
                         </button>
                         </div>
@@ -220,11 +224,26 @@ const inputNombre = document.getElementById('nombre');
 const selectTalla = document.getElementById('talla_camisa');
 const selectEstado = document.getElementById('estado');
 
-function confirmarEliminar(id, nombre) {
-    if (confirm(`¿Estás seguro de que quieres eliminar a ${nombre}? Esta acción no se puede deshacer.`)) {
-        window.location.href = `/eliminar/${id}/`;
-    }
+function escapeHtml(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
+
+campistasBody.addEventListener('click', function (e) {
+    const btn = e.target.closest('button.btn-eliminar');
+    if (!btn || !campistasBody.contains(btn)) return;
+    const id = btn.dataset.campistaId;
+    if (!id) return;
+    const row = btn.closest('tr');
+    const nombreTd = row && row.querySelector('td[data-label="Nombre"]');
+    const nombre = nombreTd ? nombreTd.textContent.trim() : '';
+    if (!confirm(`¿Estás seguro de que quieres eliminar a ${nombre}? Esta acción no se puede deshacer.`)) {
+        return;
+    }
+    window.location.href = `/eliminar/${id}/`;
+});
 
 async function fetchCampistas(page = 1) {
     const params = new URLSearchParams();
@@ -255,17 +274,18 @@ function renderCampistas(campistas) {
     campistas.forEach(c => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td data-label="Nombre">${c.nombre}</td>
-            <td data-label="Teléfono">${c.telefono}</td>
-            <td data-label="Camisa">${c.quiere_camisa ? 'Sí (' + c.talla_camisa + ')' : 'No'}</td>
-            <td data-label="Pagado">${c.total_pagado_display}</td>
-            <td data-label="Saldo">${c.saldo_pendiente_display}</td>
+            <td data-label="Nombre">${escapeHtml(c.nombre)}</td>
+            <td data-label="Teléfono">${escapeHtml(c.telefono)}</td>
+            <td data-label="Camisa">${c.quiere_camisa ? 'Sí (' + escapeHtml(c.talla_camisa || '') + ')' : 'No'}</td>
+            <td data-label="Pagado">${escapeHtml(c.total_pagado_display)}</td>
+            <td data-label="Saldo">${escapeHtml(c.saldo_pendiente_display)}</td>
             <td data-label="Estado"><span class="status-pill ${c.estado === 'Pendiente' ? 'status-pendiente' : c.estado === 'Abonando' ? 'status-abonando' : 'status-cancelado'}">${c.estado}</span></td>
             <td data-label="Acciones">
                 <div class="d-flex flex-wrap gap-2">
                     ${c.estado !== 'Cancelado' ? `<a href="/agregar_pago/${c.id}/" class="btn btn-sm btn-pago"><i class="fas fa-credit-card me-1"></i>Pagar</a>` : `<button type="button" class="btn btn-sm btn-cancelado" disabled><i class="fas fa-ban me-1"></i>Cancelado</button>`}
+                    <a href="/editar/${c.id}/" class="btn btn-sm btn-warning"><i class="fas fa-edit me-1"></i>Editar</a>
                     <a href="/agregar_pago/${c.id}/" class="btn btn-sm btn-info"><i class="fas fa-eye me-1"></i>Ver</a>
-                    <button type="button" class="btn btn-sm btn-eliminar" onclick="confirmarEliminar(${c.id}, '${c.nombre.replace("'", "\\'")}')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                    <button type="button" class="btn btn-sm btn-eliminar" data-campista-id="${c.id}"><i class="fas fa-trash me-1"></i>Eliminar</button>
                 </div>
             </td>
         `;

@@ -53,6 +53,7 @@ def lista_campistas(request):
         'filter_estado': filter_estado,
         'tallas_counts': tallas_counts,
         'estado_counts': estado_counts,
+        'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
     })
 
 
@@ -92,13 +93,35 @@ def campistas_data(request):
         'current_page': page_obj.number,
     })
 
+def _validar_campista_data(nombre, telefono):
+    import re
+    nombre = (nombre or '').strip()
+    telefono = (telefono or '').strip()
+    if not nombre or not re.fullmatch(r'[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+', nombre):
+        return 'Nombre inválido. Sólo se permiten letras y espacios.'
+    if not telefono.isdigit() or len(telefono) != 8:
+        return 'Teléfono inválido. Debe contener exactamente 8 dígitos.'
+    return None
+
+
 def agregar_campista(request):
     if request.method == 'POST':
-        nombre = request.POST.get('nombre')
-        telefono = request.POST.get('telefono')
+        nombre = (request.POST.get('nombre') or '').strip()
+        telefono = (request.POST.get('telefono') or '').strip()
         quiere_camisa = request.POST.get('quiere_camisa') == 'on'
-        talla = request.POST.get('talla_camisa')
-        
+        talla = request.POST.get('talla_camisa') if quiere_camisa else ''
+
+        error = _validar_campista_data(nombre, telefono)
+        if error:
+            return render(request, 'agregar.html', {
+                'error': error,
+                'nombre': nombre,
+                'telefono': telefono,
+                'quiere_camisa': quiere_camisa,
+                'talla_camisa': talla,
+                'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+                'campista': None,
+            })
 
         Campista.objects.create(
             nombre=nombre,
@@ -109,17 +132,53 @@ def agregar_campista(request):
 
         return redirect('lista_campistas')
 
-    return render(request, 'agregar.html')
+    return render(request, 'agregar.html', {
+        'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+        'campista': None,
+    })
+
+
+def editar_campista(request, campista_id):
+    campista = get_object_or_404(Campista, id=campista_id)
+
+    if request.method == 'POST':
+        nombre = (request.POST.get('nombre') or '').strip()
+        telefono = (request.POST.get('telefono') or '').strip()
+        quiere_camisa = request.POST.get('quiere_camisa') == 'on'
+        talla = request.POST.get('talla_camisa') if quiere_camisa else ''
+
+        error = _validar_campista_data(nombre, telefono)
+        if error:
+            return render(request, 'agregar.html', {
+                'error': error,
+                'campista': campista,
+                'nombre': nombre,
+                'telefono': telefono,
+                'quiere_camisa': quiere_camisa,
+                'talla_camisa': talla,
+                'edit': True,
+                'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+            })
+
+        campista.nombre = nombre
+        campista.telefono = telefono
+        campista.quiere_camisa = quiere_camisa
+        campista.talla_camisa = talla
+        campista.save()
+        return redirect('lista_campistas')
+
+    return render(request, 'agregar.html', {
+        'campista': campista,
+        'edit': True,
+        'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+    })
 
 def agregar_pago(request, campista_id):
     campista = get_object_or_404(Campista, id=campista_id)
 
     if campista.estado() == 'Cancelado':
-        # No permitir pagos si ya está cancelado
-        return render(request, 'agregar_pago.html', {
-            'campista': campista,
-            'error': 'Este campista ya está cancelado y no se pueden registrar más pagos.'
-        })
+        # Mensaje único en la plantilla (bloque "cancelado"), sin duplicar con {% if error %}
+        return render(request, 'agregar_pago.html', {'campista': campista})
 
     if request.method == 'POST':
         monto = request.POST.get('monto')
@@ -131,6 +190,22 @@ def agregar_pago(request, campista_id):
             monto_decimal = monto_decimal.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
         else:
             monto_decimal = monto_decimal.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        # Validar no pagar más del saldo pendiente
+        if moneda == 'NIO':
+            saldo_nio = campista.saldo_pendiente_nio()
+            if monto_decimal > saldo_nio:
+                return render(request, 'agregar_pago.html', {
+                    'campista': campista,
+                    'error': 'No puede pagar más de la deuda pendiente en NIO.'
+                })
+        else:
+            saldo_usd = campista.saldo_pendiente()
+            if monto_decimal > saldo_usd:
+                return render(request, 'agregar_pago.html', {
+                    'campista': campista,
+                    'error': 'No puede pagar más de la deuda pendiente en USD.'
+                })
 
         Pago.objects.create(
             campista=campista,

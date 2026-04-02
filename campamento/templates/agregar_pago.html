@@ -91,13 +91,6 @@
                     {% csrf_token %}
 
                     <div class="mb-3">
-                        <label for="monto" class="form-label">
-                            <i class="fas fa-dollar-sign"></i> Monto a Pagar
-                        </label>
-                        <input type="number" step="0.01" name="monto" id="monto" class="form-control form-control-lg" placeholder="0.00" required>
-                    </div>
-
-                    <div class="mb-3">
                         <label for="moneda" class="form-label">
                             <i class="fas fa-coins"></i> Tipo de Moneda
                         </label>
@@ -106,6 +99,14 @@
                             <option value="USD">💵 Dólares (USD)</option>
                             <option value="NIO">🇳🇮 Córdobas (NIO)</option>
                         </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="monto" class="form-label">
+                            <i class="fas fa-dollar-sign"></i> Monto a Pagar
+                        </label>
+                        <input type="number" step="0.01" name="monto" id="monto" class="form-control form-control-lg" placeholder="0.00" required>
+                        <div id="maxValueInfo" class="form-text text-danger d-none"></div>
                     </div>
 
                     <div id="amountDisplay" class="amount-display d-none">
@@ -173,6 +174,10 @@ function updateAmountsDisplay(moneda) {
     }
 }
 
+(function () {
+    const pagoForm = document.getElementById('pagoForm');
+    if (!pagoForm) return;
+
 document.getElementById('moneda').addEventListener('change', function() {
     const monto = parseFloat(document.getElementById('monto').value) || 0;
     const moneda = this.value;
@@ -207,13 +212,108 @@ window.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-document.getElementById('monto').addEventListener('input', function() {
-    document.getElementById('moneda').dispatchEvent(new Event('change'));
+const montoInput = document.getElementById('monto');
+const monedaSelect = document.getElementById('moneda');
+const maxValueInfo = document.getElementById('maxValueInfo');
+
+function getSaldoMaximo(moneda) {
+    if (moneda === 'NIO') {
+        return Math.round(originalSaldo * EXCHANGE_RATE);
+    }
+    return Number(originalSaldo.toFixed(2));
+}
+
+function actualizarEstadoMonto() {
+    const moneda = monedaSelect.value;
+    const maxValor = getSaldoMaximo(moneda);
+
+    if (!moneda) {
+        montoInput.removeAttribute('max');
+        montoInput.setAttribute('step', '0.01');
+        montoInput.value = '';
+        maxValueInfo.textContent = '';
+        maxValueInfo.classList.remove('d-block');
+        maxValueInfo.classList.add('d-none');
+        return;
+    }
+
+    if (moneda === 'NIO') {
+        montoInput.step = '1';
+        montoInput.setAttribute('min', '1');
+        montoInput.setAttribute('max', maxValor);
+    } else {
+        montoInput.step = '0.01';
+        montoInput.setAttribute('min', '0.01');
+        montoInput.setAttribute('max', maxValor.toFixed(2));
+    }
+
+    maxValueInfo.textContent = '';
+    maxValueInfo.classList.remove('d-block');
+    maxValueInfo.classList.add('d-none');
+}
+
+function verificarMonto() {
+    const moneda = monedaSelect.value;
+    if (!moneda) return;
+
+    const maxValor = getSaldoMaximo(moneda);
+    let valor = parseFloat(montoInput.value || 0);
+
+    if (moneda === 'NIO') {
+        montoInput.value = montoInput.value.replace(/\D/g, '');
+        valor = parseFloat(montoInput.value || 0);
+    }
+
+    if (valor > maxValor) {
+        maxValueInfo.textContent = `Monto excede el máximo permitido de ${moneda === 'NIO' ? 'C$ ' : '$ '}${maxValor}`;
+        maxValueInfo.classList.remove('d-none');
+        maxValueInfo.classList.add('d-block');
+        montoInput.value = maxValor;
+    } else {
+        maxValueInfo.textContent = '';
+        maxValueInfo.classList.remove('d-block');
+        maxValueInfo.classList.add('d-none');
+    }
+}
+
+monedaSelect.addEventListener('change', function() {
+    const monto = parseFloat(montoInput.value) || 0;
+    const moneda = this.value;
+    const display = document.getElementById('amountDisplay');
+    const usdAmount = document.getElementById('usdAmount');
+    const nioAmount = document.getElementById('nioAmount');
+
+    // Actualizar configuración de monto y reset mensaje
+    actualizarEstadoMonto();
+    verificarMonto();
+
+    // Actualizar cuadritos de resumen
+    updateAmountsDisplay(moneda);
+
+    if (moneda && monto > 0) {
+        display.classList.remove('d-none');
+        if (moneda === 'USD') {
+            usdAmount.textContent = '$' + monto.toFixed(2);
+            nioAmount.textContent = 'C$' + Math.round(monto * EXCHANGE_RATE);
+        } else if (moneda === 'NIO') {
+            usdAmount.textContent = '$' + (monto / EXCHANGE_RATE).toFixed(2);
+            nioAmount.textContent = 'C$' + Math.round(monto);
+        }
+    } else {
+        display.classList.add('d-none');
+    }
 });
 
+// For input changes, validate amount in real time
+montoInput.addEventListener('input', function() {
+    verificarMonto();
+    monedaSelect.dispatchEvent(new Event('change'));
+});
+
+
 document.getElementById('pagoForm').addEventListener('submit', function(e) {
-    const monto = parseFloat(document.getElementById('monto').value);
-    const moneda = document.getElementById('moneda').value;
+    const monto = parseFloat(montoInput.value);
+    const moneda = monedaSelect.value;
 
     if (!moneda) {
         alert('Por favor, seleccione un tipo de moneda.');
@@ -227,11 +327,19 @@ document.getElementById('pagoForm').addEventListener('submit', function(e) {
         return;
     }
 
+    const maxValor = getSaldoMaximo(moneda);
+    if (monto > maxValor) {
+        alert(`No puede pagar más de ${moneda === 'USD' ? '$ ' : 'C$ '}${maxValor}`);
+        e.preventDefault();
+        return;
+    }
+
     const confirmMessage = `¿Confirmar pago de ${moneda === 'USD' ? '$' + monto.toFixed(2) : 'C$' + monto.toFixed(2)}?`;
     if (!confirm(confirmMessage)) {
         e.preventDefault();
     }
 });
+})();
 </script>
 </body>
 </html>

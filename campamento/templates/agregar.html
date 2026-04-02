@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agregar Campista - Campamento</title>
+    <title>{% if edit %}Editar campista{% else %}Registrar campista{% endif %} - Campamento</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -47,61 +47,71 @@
         <div class="col-md-6">
             <div class="glass-card p-4">
                 <div class="text-center mb-4">
-                    <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
-                    <h2 class="text-primary">Registrar Campista</h2>
+                    <i class="fas {% if edit %}fa-user-edit{% else %}fa-user-plus{% endif %} fa-3x text-primary mb-3"></i>
+                    <h2 class="text-primary">{% if edit %}Editar campista{% else %}Registrar campista{% endif %}</h2>
+                    {% if edit %}
+                    <p class="text-muted mb-0 small">Corrige el nombre, el teléfono o la talla de la camisa si hubo un error al registrar.</p>
+                    {% endif %}
                 </div>
 
-                <form method="POST" id="campistaForm">
+                {% if error %}
+                <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% endif %}
+
+                <form method="POST" id="campistaForm"{% if edit %} data-es-edicion{% endif %}>
                     {% csrf_token %}
 
                     <div class="mb-3">
                         <label for="nombre" class="form-label">
                             <i class="fas fa-user"></i> Nombre Completo
                         </label>
-                        <input type="text" name="nombre" id="nombre" class="form-control form-control-lg" placeholder="Ingresa el nombre completo" required>
+                        <input type="text" name="nombre" id="nombre" class="form-control form-control-lg" placeholder="Ingresa el nombre completo" required
+                               value="{% if nombre %}{{ nombre }}{% elif campista %}{{ campista.nombre }}{% else %}{% endif %}">
+                        <div id="nombreError" class="form-text text-danger d-none">Nombre inválido. Sólo letras y espacios.</div>
                     </div>
 
                     <div class="mb-3">
                         <label for="telefono" class="form-label">
                             <i class="fas fa-phone"></i> Teléfono
                         </label>
-                        <input type="text" name="telefono" id="telefono" class="form-control form-control-lg" placeholder="Ingresa el número de teléfono" required>
+                        <input type="text" name="telefono" id="telefono" class="form-control form-control-lg" placeholder="Ingresa el número de teléfono" required maxlength="8"
+                               value="{% if telefono %}{{ telefono }}{% elif campista %}{{ campista.telefono }}{% else %}{% endif %}">
+                        <div id="telefonoError" class="form-text text-danger d-none">Teléfono inválido. 8 dígitos numéricos.</div>
                     </div>
 
                     <div class="mb-3">
                         <div class="form-check">
-                            <input type="checkbox" name="quiere_camisa" id="quiere_camisa" class="form-check-input">
+                            <input type="checkbox" name="quiere_camisa" id="quiere_camisa" class="form-check-input" 
+                                {% if quiere_camisa %}checked
+                                {% elif campista and campista.quiere_camisa %}checked
+                                {% endif %}>
                             <label class="form-check-label" for="quiere_camisa">
                                 <i class="fas fa-tshirt"></i> ¿Quiere camisa del campamento?
                             </label>
                         </div>
                     </div>
 
-                    <div class="mb-3">
+                    <div class="mb-3{% if not quiere_camisa and not campista %} d-none{% elif campista and not campista.quiere_camisa %} d-none{% endif %}" id="tallaCamisaGroup">
                         <label for="talla_camisa" class="form-label">
                             <i class="fas fa-tag"></i> Talla de Camisa
                         </label>
                         <select name="talla_camisa" id="talla_camisa" class="form-select form-select-lg">
                             <option value="">Seleccione talla</option>
-                            <option value="4">4</option>
-                            <option value="6">6</option>
-                            <option value="8">8</option>
-                            <option value="10">10</option>
-                            <option value="12">12</option>
-                            <option value="14">14</option>
-                            <option value="16">16</option>
-                            <option value="18">18</option>
-                            <option value="XS">XS</option>
-                            <option value="S">S</option>
-                            <option value="M">M</option>
-                            <option value="L">L</option>
-                            <option value="XL">XL</option>
+                            {% for t in tallas %}
+                                <option value="{{ t }}" 
+                                    {% if t == talla_camisa %}
+                                        selected
+                                    {% elif campista and t == campista.talla_camisa %}
+                                        selected
+                                    {% endif %}
+                                >{{ t }}</option>
+                            {% endfor %}
                         </select>
                     </div>
 
                     <div class="d-grid gap-2 mt-4">
                         <button type="submit" class="btn btn-agregar btn-custom btn-lg">
-                            <i class="fas fa-plus-circle"></i> Agregar Campista
+                            {% if edit %}<i class="fas fa-save"></i> Guardar cambios{% else %}<i class="fas fa-plus-circle"></i> Agregar campista{% endif %}
                         </button>
                         <a href="{% url 'lista_campistas' %}" class="btn btn-volver btn-custom">
                             <i class="fas fa-arrow-left"></i> Volver a Lista
@@ -115,26 +125,88 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-document.getElementById('quiere_camisa').addEventListener('change', function() {
-    const tallaSelect = document.getElementById('talla_camisa');
-    if (this.checked) {
+const NOMBRE_REGEX = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/;
+const NOMBRE_SANITIZE = /[^A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]/g;
+
+const tallaSelect = document.getElementById('talla_camisa');
+const tallaGroup = document.getElementById('tallaCamisaGroup');
+const camisaCheckbox = document.getElementById('quiere_camisa');
+
+function updateTallaVisibility() {
+    if (camisaCheckbox.checked) {
+        tallaGroup.classList.remove('d-none');
         tallaSelect.required = true;
-        tallaSelect.parentElement.style.display = 'block';
+        tallaSelect.removeAttribute('disabled');
     } else {
+        tallaGroup.classList.add('d-none');
         tallaSelect.required = false;
         tallaSelect.value = '';
-        tallaSelect.parentElement.style.display = 'none';
+        tallaSelect.setAttribute('disabled', 'disabled');
     }
-});
+}
 
-// Inicializar estado
-document.getElementById('quiere_camisa').dispatchEvent(new Event('change'));
+camisaCheckbox.addEventListener('change', updateTallaVisibility);
+updateTallaVisibility();
+
+const nombreInput = document.getElementById('nombre');
+const telefonoInput = document.getElementById('telefono');
+const nombreError = document.getElementById('nombreError');
+const telefonoError = document.getElementById('telefonoError');
+
+function normalizarNombreEnVivo() {
+    let value = nombreInput.value.replace(NOMBRE_SANITIZE, '');
+    nombreInput.value = value;
+    const trimmed = value.trim();
+    nombreError.classList.add('d-none');
+    nombreInput.classList.remove('is-invalid', 'is-valid');
+    if (!trimmed) {
+        return;
+    }
+    if (!NOMBRE_REGEX.test(trimmed)) {
+        nombreError.classList.remove('d-none');
+        nombreInput.classList.add('is-invalid');
+        return;
+    }
+    nombreInput.classList.add('is-valid');
+}
+
+function nombreValidoParaEnviar() {
+    const trimmed = nombreInput.value.trim();
+    return trimmed.length > 0 && NOMBRE_REGEX.test(trimmed);
+}
+
+function normalizarTelefonoEnVivo() {
+    let v = telefonoInput.value.replace(/\D/g, '').slice(0, 8);
+    telefonoInput.value = v;
+    telefonoError.classList.add('d-none');
+    telefonoInput.classList.remove('is-invalid', 'is-valid');
+    if (!v) {
+        return;
+    }
+    if (v.length !== 8) {
+        telefonoError.classList.remove('d-none');
+        telefonoInput.classList.add('is-invalid');
+        return;
+    }
+    telefonoInput.classList.add('is-valid');
+}
+
+function telefonoValidoParaEnviar() {
+    const v = telefonoInput.value.replace(/\D/g, '');
+    return v.length === 8;
+}
+
+nombreInput.addEventListener('input', normalizarNombreEnVivo);
+telefonoInput.addEventListener('input', normalizarTelefonoEnVivo);
 
 document.getElementById('campistaForm').addEventListener('submit', function(e) {
-    const nombre = document.getElementById('nombre').value.trim();
-    const telefono = document.getElementById('telefono').value.trim();
-    const quiereCamisa = document.getElementById('quiere_camisa').checked;
-    const talla = document.getElementById('talla_camisa').value;
+    const nombre = nombreInput.value.trim();
+    const quiereCamisa = camisaCheckbox.checked;
+    const talla = tallaSelect.value;
+    const esEdicion = e.currentTarget.hasAttribute('data-es-edicion');
+
+    normalizarNombreEnVivo();
+    normalizarTelefonoEnVivo();
 
     if (!nombre) {
         alert('Por favor, ingresa el nombre del campista.');
@@ -142,8 +214,14 @@ document.getElementById('campistaForm').addEventListener('submit', function(e) {
         return;
     }
 
-    if (!telefono) {
-        alert('Por favor, ingresa el teléfono del campista.');
+    if (!nombreValidoParaEnviar()) {
+        alert('Por favor, corrige el nombre: sólo letras y espacios.');
+        e.preventDefault();
+        return;
+    }
+
+    if (!telefonoValidoParaEnviar()) {
+        alert('Por favor, ingresa un teléfono de exactamente 8 dígitos.');
         e.preventDefault();
         return;
     }
@@ -154,13 +232,16 @@ document.getElementById('campistaForm').addEventListener('submit', function(e) {
         return;
     }
 
-    if (confirm(`¿Confirmar registro de ${nombre}?`)) {
-        // Submit form
-    } else {
+    const msgConfirm = esEdicion
+        ? `¿Guardar los cambios de ${nombre}?`
+        : `¿Confirmar registro de ${nombre}?`;
+    if (!confirm(msgConfirm)) {
         e.preventDefault();
     }
 });
+
+normalizarNombreEnVivo();
+normalizarTelefonoEnVivo();
 </script>
 </body>
-</html>
 </html>

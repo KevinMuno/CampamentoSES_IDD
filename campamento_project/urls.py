@@ -23,6 +23,7 @@ urlpatterns = [
     path('', views.lista_campistas, name='lista_campistas'),
     path('campistas-data/', views.campistas_data, name='campistas_data'),
     path('agregar/', views.agregar_campista, name='agregar_campista'),
+    path('editar/<int:campista_id>/', views.editar_campista, name='editar_campista'),
     path('agregar_pago/<int:campista_id>/', views.agregar_pago, name='agregar_pago'),
     path('eliminar/<int:campista_id>/', views.eliminar_campista, name='eliminar'),
 ]
