@@ -124,20 +124,30 @@
             </div>
         </form>
 
-        <div class="row mb-3">
+        <div class="row mb-3 g-2">
             <div class="col-md-6">
-                <div class="p-2 rounded bg-info bg-opacity-10 border border-info">
+                <div class="p-2 rounded bg-info bg-opacity-10 border border-info h-100">
                     <strong>Total campistas filtrados:</strong> {{ campistas|length }}
                 </div>
             </div>
             <div class="col-md-6">
-                <div class="p-2 rounded bg-secondary bg-opacity-10 border border-secondary">
+                <div class="p-2 rounded bg-secondary bg-opacity-10 border border-secondary h-100">
                     <strong>Total general:</strong> {{ estado_counts.Pendiente|default:0 }} pendientes, {{ estado_counts.Abonando|default:0 }} abonando, {{ estado_counts.Cancelado|default:0 }} cancelados
                 </div>
             </div>
         </div>
 
         <div class="row mb-3">
+            <div class="col-12">
+                <div id="boxRecaudado" class="p-3 rounded bg-success bg-opacity-10 border border-success">
+                    <div class="fw-semibold text-success-emphasis mb-1">Total recaudado hasta la fecha</div>
+                    <div id="recaudadoMontos" class="fs-5">{{ total_recaudado.nio }} <span class="text-muted fs-6">=</span> {{ total_recaudado.usd }}</div>
+                    <!-- <div class="small text-muted mt-1">Suma de todos los pagos registrados (abonos parciales y campistas al día / cancelados). Tipo de cambio: 1 USD = {{ exchange_rate }} C$.</div> -->
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-3" id="rowConteoTallas">
             <div class="col">
                 <strong>Conteo tallas:</strong>
                 {% for item in tallas_counts %}
@@ -173,12 +183,12 @@
                             No
                         {% endif %}
                     </td>
-                    <td data-label="Pagado">{{ c.total_pagado_display }}</td>
-                    <td data-label="Saldo">{{ c.saldo_pendiente_display }}</td>
+                    <td data-label="Pagado">{{ c.lista_pagado_display }}</td>
+                    <td data-label="Saldo">{{ c.lista_saldo_display }}</td>
                     <td data-label="Estado">
-                        {% if c.estado == 'Pendiente' %}
+                        {% if c.lista_estado == 'Pendiente' %}
                             <span class="status-pill status-pendiente">Pendiente</span>
-                        {% elif c.estado == 'Abonando' %}
+                        {% elif c.lista_estado == 'Abonando' %}
                             <span class="status-pill status-abonando">Abonando</span>
                         {% else %}
                             <span class="status-pill status-cancelado">Cancelado</span>
@@ -186,7 +196,7 @@
                     </td>
                     <td data-label="Acciones">
                         <div class="d-flex flex-wrap gap-2">
-                        {% if c.estado != 'Cancelado' %}
+                        {% if c.lista_estado != 'Cancelado' %}
                             <a href="{% url 'agregar_pago' c.id %}" class="btn btn-sm btn-pago">
                                 <i class="fas fa-credit-card me-1"></i> Pagar
                             </a>
@@ -245,23 +255,38 @@ campistasBody.addEventListener('click', function (e) {
     window.location.href = `/eliminar/${id}/`;
 });
 
+let fetchAbort = null;
+let debounceTimer = null;
+
 async function fetchCampistas(page = 1) {
+    if (fetchAbort) fetchAbort.abort();
+    fetchAbort = new AbortController();
+
     const params = new URLSearchParams();
     if (inputNombre.value.trim()) params.set('nombre', inputNombre.value.trim());
     if (selectTalla.value) params.set('talla_camisa', selectTalla.value);
     if (selectEstado.value) params.set('estado', selectEstado.value);
     params.set('page', page);
 
-    const response = await fetch(`/campistas-data/?${params.toString()}`);
-    if (!response.ok) {
-        console.error('Error al obtener datos de campistas');
-        return;
+    try {
+        const response = await fetch(`/campistas-data/?${params.toString()}`, { signal: fetchAbort.signal });
+        if (!response.ok) {
+            console.error('Error al obtener datos de campistas');
+            return;
+        }
+        const data = await response.json();
+        renderCampistas(data.campistas);
+        renderPaginacion(data.current_page, data.num_pages);
+        renderResumenes(data.tallas_counts, data.estado_counts, data.total_items, data.total_recaudado);
+    } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error('Error al obtener datos de campistas', err);
     }
+}
 
-    const data = await response.json();
-    renderCampistas(data.campistas);
-    renderPaginacion(data.current_page, data.num_pages);
-    renderResumenes(data.tallas_counts, data.estado_counts, data.total_items);
+function programarBusqueda() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => fetchCampistas(1), 320);
 }
 
 function renderCampistas(campistas) {
@@ -321,9 +346,7 @@ function renderPaginacion(currentPage, numPages) {
     paginationContainer.appendChild(createPageItem(currentPage + 1, 'Siguiente', false, currentPage === numPages));
 }
 
-function renderResumenes(tallasCounts, estadoCounts, totalItems) {
-    const totalCampistas = document.querySelector('.bg-info strong + text') || null;
-    // Actualiza texto en el HTML ya rendereado si se quiere, pero estamos reutilizando el DOM ya existente.
+function renderResumenes(tallasCounts, estadoCounts, totalItems, totalRecaudado) {
     const totalFilterEl = document.querySelector('.p-2.rounded.bg-info');
     if (totalFilterEl) {
         totalFilterEl.innerHTML = `<strong>Total campistas filtrados:</strong> ${totalItems}`;
@@ -333,7 +356,12 @@ function renderResumenes(tallasCounts, estadoCounts, totalItems) {
         totalGeneralEl.innerHTML = `<strong>Total general:</strong> ${estadoCounts.Pendiente || 0} pendientes, ${estadoCounts.Abonando || 0} abonando, ${estadoCounts.Cancelado || 0} cancelados`;
     }
 
-    const tallasEl = document.querySelector('.row.mb-3 .col');
+    const recaudadoMontos = document.getElementById('recaudadoMontos');
+    if (recaudadoMontos && totalRecaudado && totalRecaudado.usd != null && totalRecaudado.nio != null) {
+        recaudadoMontos.innerHTML = `${escapeHtml(totalRecaudado.nio)} <span class="text-muted fs-6">=</span> ${escapeHtml(totalRecaudado.usd)}`;
+    }
+
+    const tallasEl = document.querySelector('#rowConteoTallas .col');
     if (tallasEl) {
         let inner = '<strong>Conteo tallas:</strong> ';
         if (tallasCounts.length === 0) {
@@ -347,12 +375,13 @@ function renderResumenes(tallasCounts, estadoCounts, totalItems) {
     }
 }
 
-inputNombre.addEventListener('input', () => fetchCampistas(1));
+inputNombre.addEventListener('input', programarBusqueda);
 selectTalla.addEventListener('change', () => fetchCampistas(1));
 selectEstado.addEventListener('change', () => fetchCampistas(1));
 
 const resetFilters = document.getElementById('resetFilters');
 resetFilters.addEventListener('click', () => {
+    clearTimeout(debounceTimer);
     inputNombre.value = '';
     selectTalla.value = '';
     selectEstado.value = '';
