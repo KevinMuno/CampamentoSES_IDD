@@ -26,4 +26,5 @@ urlpatterns = [
     path('editar/<int:campista_id>/', views.editar_campista, name='editar_campista'),
     path('agregar_pago/<int:campista_id>/', views.agregar_pago, name='agregar_pago'),
     path('eliminar/<int:campista_id>/', views.eliminar_campista, name='eliminar'),
+    path('subsidiado/<int:campista_id>/', views.marcar_subsidiado, name='marcar_subsidiado'),
 ]

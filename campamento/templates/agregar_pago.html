@@ -86,7 +86,7 @@
                     </div>
                 </div>
 
-                {% if campista.estado != 'Cancelado' %}
+                {% if campista.estado != 'Cancelado' and not campista.subsidizado %}
                 <form method="POST" id="pagoForm">
                     {% csrf_token %}
 
@@ -132,9 +132,15 @@
                     </div>
                 </form>
                 {% else %}
-                <div class="alert alert-success" role="alert">
-                    Este campista está <strong>Cancelado</strong>. No se permiten más pagos.
-                </div>
+                    {% if campista.subsidizado %}
+                    <div class="alert alert-warning" role="alert">
+                        Este campista está marcado como <strong>Subsidiado</strong>. Se muestra como cancelado y no se registran más pagos; lo abonado no entra en el total recaudado.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-success" role="alert">
+                        Este campista está <strong>Cancelado</strong>. No se permiten más pagos.
+                    </div>
+                    {% endif %}
                 <a href="{% url 'lista_campistas' %}" class="btn btn-volver btn-custom">
                     <i class="fas fa-arrow-left"></i> Volver a Lista
                 </a>

@@ -35,6 +35,8 @@
         .btn-pago { background: #4f9bff; border-color: #3f82ea; color: #fff; }
         .btn-eliminar { background: #ff677a; border-color: #e0545f; color: #fff; }
         .btn-cancelado { background: #8695a8; border-color: #7b8f9f; color: #fff; }
+        .btn-subsidiar { border-color: #5c4d7a; color: #4a3d66; font-weight: 600; }
+        .btn-subsidiar:hover { background: #5c4d7a; color: #fff; border-color: #5c4d7a; }
         .table thead th {
             background: linear-gradient(90deg, #559be8, #2d78ef);
             color: #fff;
@@ -72,6 +74,7 @@
 </head>
 
 <body class="bg-light">
+{% csrf_token %}
 
 <div class="container mt-4">
 
@@ -95,6 +98,7 @@
                 <label for="talla_camisa" class="form-label">Talla de Camisa</label>
                 <select name="talla_camisa" id="talla_camisa" class="form-select">
                     <option value="">Todas</option>
+                    <option value="2" {% if filter_talla == '2' %}selected{% endif %}>2</option>
                     <option value="4" {% if filter_talla == '4' %}selected{% endif %}>4</option>
                     <option value="6" {% if filter_talla == '6' %}selected{% endif %}>6</option>
                     <option value="8" {% if filter_talla == '8' %}selected{% endif %}>8</option>
@@ -108,6 +112,7 @@
                     <option value="M" {% if filter_talla == 'M' %}selected{% endif %}>M</option>
                     <option value="L" {% if filter_talla == 'L' %}selected{% endif %}>L</option>
                     <option value="XL" {% if filter_talla == 'XL' %}selected{% endif %}>XL</option>
+                    <option value="XXL" {% if filter_talla == 'XXL' %}selected{% endif %}>XXL</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -142,7 +147,7 @@
                 <div id="boxRecaudado" class="p-3 rounded bg-success bg-opacity-10 border border-success">
                     <div class="fw-semibold text-success-emphasis mb-1">Total recaudado hasta la fecha</div>
                     <div id="recaudadoMontos" class="fs-5">{{ total_recaudado.nio }} <span class="text-muted fs-6">=</span> {{ total_recaudado.usd }}</div>
-                    <!-- <div class="small text-muted mt-1">Suma de todos los pagos registrados (abonos parciales y campistas al día / cancelados). Tipo de cambio: 1 USD = {{ exchange_rate }} C$.</div> -->
+                    <div class="small text-muted mt-1">Suma de pagos reales (no incluye campistas <strong>subsidiados</strong>, como cocineros o niños pequeños).</div>
                 </div>
             </div>
         </div>
@@ -192,6 +197,9 @@
                             <span class="status-pill status-abonando">Abonando</span>
                         {% else %}
                             <span class="status-pill status-cancelado">Cancelado</span>
+                            {% if c.subsidizado %}
+                            <span class="badge bg-secondary ms-1 align-middle">Subsidiado</span>
+                            {% endif %}
                         {% endif %}
                     </td>
                     <td data-label="Acciones">
@@ -209,6 +217,11 @@
                         </a>                        <a href="{% url 'agregar_pago' c.id %}" class="btn btn-sm btn-info">
                             <i class="fas fa-eye me-1"></i> Ver
                         </a>
+                        {% if c.puede_subsidiar %}
+                        <button type="button" class="btn btn-sm btn-subsidiar btn-outline-secondary" data-campista-id="{{ c.id }}">
+                            <i class="fas fa-hand-holding-heart me-1"></i> Subsidiado
+                        </button>
+                        {% endif %}
                         <button type="button" class="btn btn-sm btn-eliminar" data-campista-id="{{ c.id }}">
                             <i class="fas fa-trash me-1"></i> Eliminar
                         </button>
@@ -241,7 +254,42 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-campistasBody.addEventListener('click', function (e) {
+campistasBody.addEventListener('click', async function (e) {
+    const subBtn = e.target.closest('button.btn-subsidiar');
+    if (subBtn && campistasBody.contains(subBtn)) {
+        const id = subBtn.dataset.campistaId;
+        if (!id) return;
+        const row = subBtn.closest('tr');
+        const nombreTd = row && row.querySelector('td[data-label="Nombre"]');
+        const nombre = nombreTd ? nombreTd.textContent.trim() : '';
+        if (!confirm(`¿Marcar a ${nombre} como subsidiado? Quedará como cancelado y lo que haya pagado ya no contará en el total recaudado.`)) {
+            return;
+        }
+        const csrfEl = document.querySelector('[name=csrfmiddlewaretoken]');
+        const csrftoken = csrfEl ? csrfEl.value : '';
+        try {
+            const r = await fetch(`/subsidiado/${id}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Accept': 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+            let j = {};
+            try { j = await r.json(); } catch (_) {}
+            if (!r.ok) {
+                alert(j.error || 'No se pudo marcar como subsidiado.');
+                return;
+            }
+            fetchCampistas(currentPageAjax);
+        } catch (err) {
+            console.error(err);
+            alert('Error de red al marcar como subsidiado.');
+        }
+        return;
+    }
+
     const btn = e.target.closest('button.btn-eliminar');
     if (!btn || !campistasBody.contains(btn)) return;
     const id = btn.dataset.campistaId;
@@ -257,6 +305,7 @@ campistasBody.addEventListener('click', function (e) {
 
 let fetchAbort = null;
 let debounceTimer = null;
+let currentPageAjax = 1;
 
 async function fetchCampistas(page = 1) {
     if (fetchAbort) fetchAbort.abort();
@@ -275,6 +324,7 @@ async function fetchCampistas(page = 1) {
             return;
         }
         const data = await response.json();
+        currentPageAjax = data.current_page;
         renderCampistas(data.campistas);
         renderPaginacion(data.current_page, data.num_pages);
         renderResumenes(data.tallas_counts, data.estado_counts, data.total_items, data.total_recaudado);
@@ -304,12 +354,13 @@ function renderCampistas(campistas) {
             <td data-label="Camisa">${c.quiere_camisa ? 'Sí (' + escapeHtml(c.talla_camisa || '') + ')' : 'No'}</td>
             <td data-label="Pagado">${escapeHtml(c.total_pagado_display)}</td>
             <td data-label="Saldo">${escapeHtml(c.saldo_pendiente_display)}</td>
-            <td data-label="Estado"><span class="status-pill ${c.estado === 'Pendiente' ? 'status-pendiente' : c.estado === 'Abonando' ? 'status-abonando' : 'status-cancelado'}">${c.estado}</span></td>
+            <td data-label="Estado"><span class="status-pill ${c.estado === 'Pendiente' ? 'status-pendiente' : c.estado === 'Abonando' ? 'status-abonando' : 'status-cancelado'}">${c.estado}</span>${c.subsidizado ? '<span class="badge bg-secondary ms-1 align-middle">Subsidiado</span>' : ''}</td>
             <td data-label="Acciones">
                 <div class="d-flex flex-wrap gap-2">
                     ${c.estado !== 'Cancelado' ? `<a href="/agregar_pago/${c.id}/" class="btn btn-sm btn-pago"><i class="fas fa-credit-card me-1"></i>Pagar</a>` : `<button type="button" class="btn btn-sm btn-cancelado" disabled><i class="fas fa-ban me-1"></i>Cancelado</button>`}
                     <a href="/editar/${c.id}/" class="btn btn-sm btn-warning"><i class="fas fa-edit me-1"></i>Editar</a>
                     <a href="/agregar_pago/${c.id}/" class="btn btn-sm btn-info"><i class="fas fa-eye me-1"></i>Ver</a>
+                    ${c.puede_subsidiar ? `<button type="button" class="btn btn-sm btn-subsidiar btn-outline-secondary" data-campista-id="${c.id}"><i class="fas fa-hand-holding-heart me-1"></i>Subsidiado</button>` : ''}
                     <button type="button" class="btn btn-sm btn-eliminar" data-campista-id="${c.id}"><i class="fas fa-trash me-1"></i>Eliminar</button>
                 </div>
             </td>

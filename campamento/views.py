@@ -17,6 +17,7 @@ from django.db.models import (
 from django.db.models.functions import Coalesce, Round
 from django.core.paginator import Paginator
 from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from .models import Campista, Pago
 
 EXCHANGE_RATE = Decimal('36.67')
@@ -60,19 +61,34 @@ def _aplicar_filtros_campistas(qs, search_name='', filter_talla='', filter_estad
     if filter_talla:
         qs = qs.filter(talla_camisa=filter_talla)
     if filter_estado == 'Pendiente':
-        qs = qs.filter(tp_round=Decimal('0'))
+        qs = qs.filter(tp_round=Decimal('0'), subsidizado=False)
     elif filter_estado == 'Abonando':
-        qs = qs.filter(tp_round__gt=0, tp_round__lt=TOTAL_CAMPA_USD)
+        qs = qs.filter(subsidizado=False, tp_round__gt=0, tp_round__lt=TOTAL_CAMPA_USD)
     elif filter_estado == 'Cancelado':
-        qs = qs.filter(tp_round__gte=TOTAL_CAMPA_USD)
+        qs = qs.filter(Q(subsidizado=True) | Q(tp_round__gte=TOTAL_CAMPA_USD))
     return qs
 
 
-def _fila_lista_desde_anotaciones(tp_round, ultima_mon):
+def _puede_marcar_subsidiado(c):
+    return not getattr(c, 'subsidizado', False)
+
+
+def _fila_lista_desde_anotaciones(tp_round, ultima_mon, subsidizado=False):
     """Misma lógica visual que total_pagado_display / saldo_pendiente_display / estado()."""
     tp = tp_round if tp_round is not None else Decimal('0')
     ultima = ultima_mon or 'USD'
     tp = tp.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    if subsidizado:
+        estado = 'Cancelado'
+        saldo = Decimal('0')
+        if ultima == 'NIO':
+            tp_nio = (tp * EXCHANGE_RATE).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+            pagado_display = f'C$ {tp_nio}'
+            saldo_display = 'C$ 0'
+        else:
+            pagado_display = f'$ {tp}'
+            saldo_display = '$ 0.00'
+        return estado, pagado_display, saldo_display
     if tp == 0:
         estado = 'Pendiente'
     elif tp >= TOTAL_CAMPA_USD:
@@ -93,20 +109,21 @@ def _fila_lista_desde_anotaciones(tp_round, ultima_mon):
 
 
 def _enriquecer_campista_lista(c):
-    estado, pd, sd = _fila_lista_desde_anotaciones(c.tp_round, c.ultima_mon)
+    estado, pd, sd = _fila_lista_desde_anotaciones(c.tp_round, c.ultima_mon, c.subsidizado)
     c.lista_estado = estado
     c.lista_pagado_display = pd
     c.lista_saldo_display = sd
+    c.puede_subsidiar = _puede_marcar_subsidiado(c)
     return c
 
 
 def _total_recaudado_global():
-    """Suma de todos los pagos registrados (pendientes no aportan; abonando + cancelados sí)."""
+    """Suma de pagos de campistas no subsidiados (subsidiados: aparecen al día pero no mueven caja)."""
     nio_a_usd = ExpressionWrapper(
         F('monto') / Value(EXCHANGE_RATE, output_field=DecimalField(max_digits=24, decimal_places=8)),
         output_field=DecimalField(max_digits=24, decimal_places=8),
     )
-    total_usd = Pago.objects.aggregate(
+    total_usd = Pago.objects.filter(campista__subsidizado=False).aggregate(
         s=Coalesce(
             Sum(
                 Case(
@@ -134,9 +151,9 @@ def _conteos_generales():
 
     base = _qs_con_total_redondeado()
     agg = base.aggregate(
-        pendiente=Count('pk', filter=Q(tp_round=Decimal('0'))),
-        abonando=Count('pk', filter=Q(tp_round__gt=0, tp_round__lt=TOTAL_CAMPA_USD)),
-        cancelado=Count('pk', filter=Q(tp_round__gte=TOTAL_CAMPA_USD)),
+        pendiente=Count('pk', filter=Q(tp_round=Decimal('0'), subsidizado=False)),
+        abonando=Count('pk', filter=Q(subsidizado=False, tp_round__gt=0, tp_round__lt=TOTAL_CAMPA_USD)),
+        cancelado=Count('pk', filter=Q(subsidizado=True) | Q(tp_round__gte=TOTAL_CAMPA_USD)),
     )
     estado_counts = {
         'Pendiente': agg['pendiente'] or 0,
@@ -167,7 +184,7 @@ def lista_campistas(request):
         'estado_counts': estado_counts,
         'total_recaudado': total_recaudado,
         'exchange_rate': EXCHANGE_RATE,
-        'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+        'tallas': ['2','4','6','8','10','12','14','16','18','XS','S','M','L','XL','XXL'],
     })
 
 
@@ -188,13 +205,17 @@ def campistas_data(request):
     total_nio_str = str((TOTAL_CAMPA_USD * EXCHANGE_RATE).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
     campistas_data = []
     for c in page_obj.object_list:
-        estado, pagado_d, saldo_d = _fila_lista_desde_anotaciones(c.tp_round, c.ultima_mon)
+        estado, pagado_d, saldo_d = _fila_lista_desde_anotaciones(
+            c.tp_round, c.ultima_mon, c.subsidizado
+        )
         campistas_data.append({
             'id': c.id,
             'nombre': c.nombre,
             'telefono': c.telefono,
             'quiere_camisa': c.quiere_camisa,
             'talla_camisa': c.talla_camisa,
+            'subsidizado': c.subsidizado,
+            'puede_subsidiar': _puede_marcar_subsidiado(c),
             'total': str(TOTAL_CAMPA_USD),
             'total_nio': total_nio_str,
             'total_pagado_display': pagado_d,
@@ -238,7 +259,7 @@ def agregar_campista(request):
                 'telefono': telefono,
                 'quiere_camisa': quiere_camisa,
                 'talla_camisa': talla,
-                'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+                'tallas': ['2','4','6','8','10','12','14','16','18','XS','S','M','L','XL','XXL'],
                 'campista': None,
             })
 
@@ -252,7 +273,7 @@ def agregar_campista(request):
         return redirect('lista_campistas')
 
     return render(request, 'agregar.html', {
-        'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+        'tallas': ['2','4','6','8','10','12','14','16','18','XS','S','M','L','XL','XXL'],
         'campista': None,
     })
 
@@ -276,7 +297,7 @@ def editar_campista(request, campista_id):
                 'quiere_camisa': quiere_camisa,
                 'talla_camisa': talla,
                 'edit': True,
-                'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+                'tallas': ['2','4','6','8','10','12','14','16','18','XS','S','M','L','XL','XXL'],
             })
 
         campista.nombre = nombre
@@ -289,17 +310,23 @@ def editar_campista(request, campista_id):
     return render(request, 'agregar.html', {
         'campista': campista,
         'edit': True,
-        'tallas': ['4','6','8','10','12','14','16','18','XS','S','M','L','XL'],
+        'tallas': ['2','4','6','8','10','12','14','16','18','XS','S','M','L','XL','XXL'],
     })
 
 def agregar_pago(request, campista_id):
     campista = get_object_or_404(Campista, id=campista_id)
+
+    if campista.subsidizado:
+        return render(request, 'agregar_pago.html', {'campista': campista})
 
     if campista.estado() == 'Cancelado':
         # Mensaje único en la plantilla (bloque "cancelado"), sin duplicar con {% if error %}
         return render(request, 'agregar_pago.html', {'campista': campista})
 
     if request.method == 'POST':
+        if campista.subsidizado or campista.estado() == 'Cancelado':
+            return redirect('lista_campistas')
+
         monto = request.POST.get('monto')
         moneda = request.POST.get('moneda')
 
@@ -335,6 +362,20 @@ def agregar_pago(request, campista_id):
         return redirect('lista_campistas')
 
     return render(request, 'agregar_pago.html', {'campista': campista})
+
+
+@require_POST
+def marcar_subsidiado(request, campista_id):
+    campista = get_object_or_404(Campista, id=campista_id)
+    if campista.subsidizado:
+        if request.accepts('application/json'):
+            return JsonResponse({'ok': True, 'ya_marcado': True})
+        return redirect('lista_campistas')
+    campista.subsidizado = True
+    campista.save(update_fields=['subsidizado'])
+    if request.accepts('application/json'):
+        return JsonResponse({'ok': True})
+    return redirect('lista_campistas')
 
 
 #ELIMINAR CAMPISTA

@@ -13,6 +13,7 @@ class Campista(models.Model):
     )
 
     TALLAS = (
+        ('2', '2'),
         ('4', '4'),
         ('6', '6'),
         ('8', '8'),
@@ -26,12 +27,17 @@ class Campista(models.Model):
         ('M', 'M'),
         ('L', 'L'),
         ('XL', 'XL'),
+        ('XXL', 'XXL'),
     )
 
     nombre = models.CharField(max_length=200)
     telefono = models.CharField(max_length=20, blank=True)
     quiere_camisa = models.BooleanField(default=False)
     talla_camisa = models.CharField(max_length=5, choices=TALLAS, blank=True, null=True)
+    subsidizado = models.BooleanField(
+        default=False,
+        help_text='Si es True: aparece como cancelado y sus pagos no suman al total recaudado.',
+    )
 
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
